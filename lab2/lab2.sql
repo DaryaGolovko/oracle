@@ -92,3 +92,13 @@ BEGIN
     END IF;
 END;
 
+--3rd task delete cascade 
+CREATE OR REPLACE TRIGGER ForeighnKeyDelete
+    BEFORE DELETE ON Groups FOR EACH ROW 
+BEGIN
+    DELETE FROM Students WHERE group_id = :OLD.id;
+END;
+
+--4th logs
+
+
