@@ -152,6 +152,90 @@ select * from STUDENTS;
 
 
 --4th logs
---???
---5th logs restoring - later
+CREATE TABLE LogsTable ( 
+    id NUMBER PRIMARY KEY NOT NULL, 
+    date_time TIMESTAMP NOT NULL, 
+    description VARCHAR2(100) NOT NULL,
+    new_id NUMBER, 
+    old_id NUMBER, 
+    new_name VARCHAR2(20), 
+    old_name VARCHAR2(20), 
+    new_group_id NUMBER, 
+    old_group_id NUMBER
+);
+
+CREATE OR REPLACE TRIGGER StudentsLogs
+    AFTER INSERT OR UPDATE OR DELETE ON Students FOR EACH ROW 
+DECLARE 
+    id NUMBER;
+BEGIN
+    SELECT COUNT(*) INTO id FROM LogsTable;
+    
+    CASE
+        WHEN INSERTING THEN
+            INSERT INTO LogsTable VALUES (
+                id + 1, TO_TIMESTAMP(TO_CHAR(SYSDATE, 'DD-MON-YYYY HH:MI:SS AM')), 'INSERTING',
+                :NEW.id, NULL, :NEW.name, NULL, :NEW.group_id, NULL);
+        WHEN UPDATING THEN
+            INSERT INTO LogsTable VALUES (
+                id + 1, TO_TIMESTAMP(TO_CHAR(SYSDATE, 'DD-MON-YYYY HH:MI:SS AM')), 'UPDATING',
+                :NEW.id, :OLD.id, :NEW.name, :OLD.name, :NEW.group_id, :OLD.group_id);
+        WHEN DELETING THEN
+            INSERT INTO LogsTable VALUES (
+                id + 1, TO_TIMESTAMP(TO_CHAR(SYSDATE, 'DD-MON-YYYY HH:MI:SS AM')), 'DELETING',
+                NULL, :OLD.id, NULL, :OLD.name, NULL, :OLD.group_id);
+    END CASE;
+END;
+
+--tests and helpers
+ALTER TABLE Groups DISABLE ALL TRIGGERS;
+ALTER TABLE Students DISABLE ALL TRIGGERS;
+ALTER TRIGGER studentslogs ENABLE;
+ALTER TRIGGER UpdateStudentsNumber ENABLE;
+
+UPDATE Students SET group_id = 5 WHERE name = 'A';
+
+SELECT * FROM Students;
+SELECT * FROM Groups;
+SELECT * FROM LogsTable;
+
+--5th
+CREATE OR REPLACE PROCEDURE RestoreData(time TIMESTAMP) IS
+BEGIN
+    FOR action IN (SELECT * FROM LogsTable WHERE time < date_time ORDER BY id DESC)
+    LOOP
+        CASE
+            WHEN action.description = 'INSERTING' THEN
+                DELETE FROM Students WHERE id = action.new_id;
+            WHEN action.description = 'UPDATING' THEN
+                UPDATE Students SET id = action.old_id,
+                        name = action.old_name,
+                        group_id = action.old_group_id
+                    WHERE id = action.new_id;
+            WHEN action.description = 'DELETING' THEN
+                INSERT INTO Students VALUES (
+                    action.old_id, action.old_name, action.old_group_id);
+        END CASE;
+    END LOOP;
+END RestoreData;
+
+-- interval??
+CREATE OR REPLACE PROCEDURE RestoreDataInterval(time_interval INTERVAL DAY TO SECOND) IS
+BEGIN
+    RestoreData(TO_TIMESTAMP(TO_CHAR(SYSDATE, 'DD-MON-YYYY HH:MI:SS AM')) - time_interval);
+END RestoreDataInterval;
+
+--helpers and tests
+BEGIN
+    RestoreData(TO_TIMESTAMP('24-MAR-23 12.39.55.000000000 AM'));
+END;
+
+BEGIN
+    RestoreData(TO_TIMESTAMP(CURRENT_TIMESTAMP - 10));
+END;
+
+BEGIN
+    RestoreDataInterval(INTERVAL '1' DAY);
+END;
+
 
